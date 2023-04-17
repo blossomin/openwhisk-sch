@@ -296,7 +296,7 @@ class ShardingContainerPoolBalancer(
         val timeLimitInfo = if (timeLimit == TimeLimit()) { "std" } else { "non-std" }
         logging.info(
           this,
-          s"scheduled activation ${msg.activationId}, action '${msg.action.asString}' ($actionType), ns '${msg.user.namespace.name.asString}', mem limit ${memoryLimit.megabytes} MB (${memoryLimitInfo}), time limit ${timeLimit.duration.toMillis} ms (${timeLimitInfo}) to ${invoker}")
+          s"hash-based scheduled activation ${msg.activationId}, action '${msg.action.asString}' ($actionType), ns '${msg.user.namespace.name.asString}', mem limit ${memoryLimit.megabytes} MB (${memoryLimitInfo}), time limit ${timeLimit.duration.toMillis} ms (${timeLimitInfo}) to ${invoker}")
         val activationResult = setupActivation(msg, action, invoker)
         sendActivationToInvoker(messageProducer, msg, invoker).map(_ => activationResult)
       }
