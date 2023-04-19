@@ -67,21 +67,6 @@ class RedisClient(
     }
   }
 
-  def setAvailableCpu(permits: Int): Boolean = {
-    try {
-      val jedis = pool.getResource
-      val key: String = "available_cpu"
-      val value: String = permits.toString
-      jedis.set(key, value)
-      jedis.close()
-      true
-    } catch {
-      case e: Exception => {
-        false
-      }
-    }
-  }
-
   def setAvailableMemory(permits: Int): Boolean = {
     try {
       val jedis = pool.getResource
@@ -97,13 +82,16 @@ class RedisClient(
     }
   }
 
-  def setActivationsForInvoker(invoker: String, activations: Int): Boolean = {
+  def setStateByInvoker(invoker: String, memorySlot: Int, inflight: Int): Boolean = {
     try {
       val jedis = pool.getResource
       val name: String = invoker
-      val key: String = "n_undone_request"
-      val value: String = activations.toString
+      val key: String = "memory"
+      val value: String = memorySlot.toString
       jedis.hset(name, key, value)
+      val key2: String = "inflight"
+      val value2: String = inflight.toString
+      jedis.hset(name, key2, value2)
       jedis.close()
       true
     } catch {
@@ -113,39 +101,15 @@ class RedisClient(
     }
   }
 
-  def setAvailableMemoryForInvoker(invokerList: IndexedSeq[String], memoryPermitsList: IndexedSeq[Int]): Boolean = {
+  def setInflightByInvoker(invoker: String, inflightList: IndexedSeq[String]): Boolean = {
     try {
       val jedis = pool.getResource
-      val pipeline = jedis.pipelined()
-      val numInovkers: Int = invokerList.size
-      for (i <- 0 until numInovkers) {
-        val name: String = invokerList(i)
-        val key: String = "available_memory"
-        val value: String = memoryPermitsList(i).toString
-        pipeline.hset(name, key, value)
+      val key: String = invoker + "_request"
+      jedis.del(key)
+      for (i <- 0 until inflightList.size) {
+        val value: String = inflightList(i)
+        jedis.sadd(key, value)
       }
-      pipeline.sync()
-      jedis.close()
-      true
-    } catch {
-      case e: Exception => {
-        false
-      }
-    }
-  }
-  // record available CPU
-  def setAvailableCPUForInvoker(invokerList: IndexedSeq[String], cpuPermitsList: IndexedSeq[Int]): Boolean = {
-    try {
-      val jedis = pool.getResource
-      val pipeline = jedis.pipelined()
-      val numInovkers: Int = invokerList.size
-      for (i <- 0 until numInovkers) {
-        val name: String = invokerList(i)
-        val key: String = "available_cpu"
-        val value: String = cpuPermitsList(i).toString
-        pipeline.hset(name, key, value)
-      }
-      pipeline.sync()
       jedis.close()
       true
     } catch {

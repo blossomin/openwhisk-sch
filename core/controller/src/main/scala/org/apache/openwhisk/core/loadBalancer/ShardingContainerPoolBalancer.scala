@@ -44,6 +44,11 @@ import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
+// import play.api.libs.json._
+
+// import spray.json._
+// import DefaultJsonProtocol._
+
 /**
  * A loadbalancer that schedules workload based on a hashing-algorithm.
  *
@@ -255,6 +260,26 @@ class ShardingContainerPoolBalancer(
   /** 1. Publish a message to the loadbalancer */
   override def publish(action: ExecutableWhiskActionMetaData, msg: ActivationMessage)(
     implicit transid: TransactionId): Future[Future[Either[ActivationId, WhiskActivation]]] = {
+    
+    // logging.info(this, s"message content:${msg.content}")(TransactionId.loadbalancer)
+    val invokerName: String = msg.content match {
+        case Some(js) => {
+            val str = js.compactPrint
+            val index = str.indexOf("invoker\":")
+            if (index >= 0) {
+                val cidx = str.indexOf(',', index)
+                var qidx = str.indexOf('}', index)
+                if(cidx >= 0) {
+                    qidx = cidx.min(qidx)
+                }
+                str.substring(index+9, qidx)
+            } else {
+                "None"
+            }
+        } 
+        case None => "None"
+    }
+    logging.info(this, s"message content:${msg.content}, invoker:${invokerName}")(TransactionId.loadbalancer)
 
     val isBlackboxInvocation = action.exec.pull
     val actionType = if (!isBlackboxInvocation) "managed" else "blackbox"
@@ -263,7 +288,11 @@ class ShardingContainerPoolBalancer(
       else (schedulingState.blackboxInvokers, schedulingState.blackboxStepSizes)
     val chosen = if (invokersToUse.nonEmpty) {
       val hash = ShardingContainerPoolBalancer.generateHash(msg.user.namespace.name, action.fullyQualifiedName(false))
-      val homeInvoker = hash % invokersToUse.size
+      val homeInvoker = if(invokerName == "None") {
+        hash % invokersToUse.size
+      } else {
+        invokerName.toInt
+      }
       val stepSize = stepSizes(hash % stepSizes.size)
       val invoker: Option[(InvokerInstanceId, Boolean)] = ShardingContainerPoolBalancer.schedule(
         action.limits.concurrency.maxConcurrent,
@@ -415,7 +444,7 @@ object ShardingContainerPoolBalancer extends LoadBalancerProvider {
         Some(invoker.id, false)
       } else {
         // If we've gone through all invokers
-        if (stepsDone == numInvokers + 1) {
+        // if (stepsDone == numInvokers + 1) {
           val healthyInvokers = invokers.filter(_.status.isUsable)
           if (healthyInvokers.nonEmpty) {
             // Choose a healthy invoker randomly
@@ -426,10 +455,10 @@ object ShardingContainerPoolBalancer extends LoadBalancerProvider {
           } else {
             None
           }
-        } else {
-          val newIndex = (index + step) % numInvokers
-          schedule(maxConcurrent, fqn, invokers, dispatched, slots, newIndex, step, stepsDone + 1)
-        }
+//        } else {
+//          val newIndex = (index + step) % numInvokers
+//          schedule(maxConcurrent, fqn, invokers, dispatched, slots, newIndex, step, stepsDone + 1)
+//        }
       }
     } else {
       None

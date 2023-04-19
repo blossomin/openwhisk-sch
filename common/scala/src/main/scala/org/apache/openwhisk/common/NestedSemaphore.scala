@@ -113,4 +113,6 @@ class NestedSemaphore[T](memoryPermits: Int) extends ForcibleSemaphore(memoryPer
   }
   //for testing
   def concurrentState = actionConcurrentSlotsMap.readOnlySnapshot()
+
+  override def availablePermits = super.availablePermits
 }

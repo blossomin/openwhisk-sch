@@ -218,20 +218,28 @@ class Controller(val instance: ControllerInstanceId,
         val schedulingState = loadBalancer.schedulingState
 
         if (schedulingState != null) {
+          //
           val permits = schedulingState.invokerSlots
-          var CpuPermits: Int = 0
+          val invokers = schedulingState.invokers
+
           var MemoryPermits: Int = 0
 
-          for (i <- 0 until permits.length) {
-            CpuPermits = CpuPermits + permits(i).availableCpuPermits
-            MemoryPermits = MemoryPermits + permits(i).availableMemoryPermits
+          for (i <- 0 until invokers.length) {
+            loadBalancer.activeActivationsByInvoker(i.toString) onComplete {
+              case Success(inflight) => {
+                redisClient.setStateByInvoker(invokers(i).id.source, permits(i).availablePermits, inflight)
+              }
+              case _ =>
+            }
+            MemoryPermits = MemoryPermits + permits(i).availablePermits
+
+            // set the request list
           }
 
           // Update available CPU and memory
-          val  setCpu = redisClient.setAvailableCpu(CpuPermits)
           val setMem = redisClient.setAvailableMemory(MemoryPermits)
 
-          logging.info(this, s"Controller: redis set the CPU:${setCpu} and Memory:${setMem}")
+          logging.info(this, s"Controller: redis set the Memory:${setMem}")
         }
 
         // Update total number of undone requests
