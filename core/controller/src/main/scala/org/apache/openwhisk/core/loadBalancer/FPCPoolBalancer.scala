@@ -652,6 +652,9 @@ class FPCPoolBalancer(config: WhiskConfig,
     })
   }
 
+  // For code compatibility
+  override val schedulingState: ShardingContainerPoolBalancerState = null
+
   actorSystem.scheduler.scheduleAtFixedRate(10.seconds, 10.seconds)(() => emitMetrics())
 
   /** Gets the number of in-flight activations for a specific user. */

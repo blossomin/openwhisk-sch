@@ -51,6 +51,9 @@ import scala.concurrent.ExecutionContext.Implicits
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
+import org.apache.openwhisk.core.loadBalancer.RedisClient
+import scala.concurrent.ExecutionContext.Implicits.global
+
 /**
  * The Controller is the service that provides the REST API for OpenWhisk.
  *
@@ -195,6 +198,106 @@ class Controller(val instance: ControllerInstanceId,
     LogLimit.config,
     runtimes,
     List(apiV1.basepath()))
+  // RL-Dong
+  // Redis client
+  // record the state every 100ms in Redis for RL agent use
+  // now only have availableMemory and availableCpu, Activation
+  // need more metrics like: network, disk for each invoker
+  private val redisClient = new RedisClient()
+  redisClient.init
+
+  class RedisThread(
+                     redisClient: RedisClient
+                   ) extends Thread {
+    override def run(){
+      while (true) {
+        Thread.sleep(redisClient.interval)
+
+        // Get scheduling state
+        val schedulingState = loadBalancer.schedulingState
+
+        if (schedulingState != null) {
+          val permits = schedulingState.invokerSlots
+          var CpuPermits: Int = 0
+          var MemoryPermits: Int = 0
+
+          for (i <- 0 until permits.length) {
+            CpuPermits = CpuPermits + permits(i).availableCpuPermits
+            MemoryPermits = MemoryPermits + permits(i).availableMemoryPermits
+          }
+
+          // Update available CPU and memory
+          val  setCpu = redisClient.setAvailableCpu(CpuPermits)
+          val setMem = redisClient.setAvailableMemory(MemoryPermits)
+
+          logging.info(this, s"Controller: redis set the CPU:${setCpu} and Memory:${setMem}")
+        }
+
+        // Update total number of undone requests
+        loadBalancer.totalActiveActivations onComplete {
+          case Success(result) => {
+            val setAct = redisClient.setActivations(result)
+            logging.info(this, s"Controller: redis set activation:${setAct}")
+          }
+          case _ => // Ignore
+        }
+      }
+    }
+  }
+  // RL-Dong
+  // Redis client
+  // record the state every 100ms in Redis for RL agent use
+  // now only have availableMemory and availableCpu, Activation
+  // need more metrics like: network, disk for each invoker
+  private val redisClient = new RedisClient()
+  redisClient.init
+
+  class RedisThread(
+                     redisClient: RedisClient
+                   ) extends Thread {
+    override def run(){
+      while (true) {
+        Thread.sleep(redisClient.interval)
+
+        // Get scheduling state
+        val schedulingState = loadBalancer.schedulingState
+
+        if (schedulingState != null) {
+          //
+          val permits = schedulingState.invokerSlots
+          val invokers = schedulingState.invokers
+
+          var MemoryPermits: Int = 0
+
+          for (i <- 0 until invokers.length) {
+            loadBalancer.activeActivationsByInvoker(i.toString) onComplete {
+              case Success(inflight) => {
+                redisClient.setStateByInvoker(invokers(i).id.source, permits(i).availablePermits, inflight)
+              }
+              case _ =>
+            }
+            MemoryPermits = MemoryPermits + permits(i).availablePermits
+
+            // set the request list
+          }
+
+          // Update available CPU and memory
+          val setMem = redisClient.setAvailableMemory(MemoryPermits)
+
+          logging.info(this, s"Controller: redis set the Memory:${setMem}")
+        }
+
+        // Update total number of undone requests
+        loadBalancer.totalActiveActivations onComplete {
+          case Success(result) => {
+            val setAct = redisClient.setActivations(result)
+            logging.info(this, s"Controller: redis set activation:${setAct}")
+          }
+          case _ => // Ignore
+        }
+      }
+    }
+  }
 
   private val controllerUsername = loadConfigOrThrow[String](ConfigKeys.whiskControllerUsername)
   private val controllerPassword = loadConfigOrThrow[String](ConfigKeys.whiskControllerPassword)
@@ -227,6 +330,11 @@ class Controller(val instance: ControllerInstanceId,
       } ~ internalInvokerHealth ~ activationStatus ~ disable
     }
   }
+  // RL-Dong
+  // Start monitoring states
+  val redisThread = new RedisThread(redisClient)
+  redisThread.start()
+
 }
 
 /**

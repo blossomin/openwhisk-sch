@@ -82,6 +82,10 @@ class LeanBalancer(config: WhiskConfig,
   override protected def emitMetrics() = {
     super.emitMetrics()
   }
+
+  // For code compatibility
+  override val schedulingState: ShardingContainerPoolBalancerState = null
+
 }
 
 object LeanBalancer extends LoadBalancerProvider {
