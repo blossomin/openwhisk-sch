@@ -425,7 +425,7 @@ object ShardingContainerPoolBalancer extends LoadBalancerProvider {
    * @param step stable identifier of the entity to be scheduled
    * @return an invoker to schedule to or None of no invoker is available
    */
-  @tailrec
+  // @tailrec
   def schedule(
     maxConcurrent: Int,
     fqn: FullyQualifiedEntityName,
