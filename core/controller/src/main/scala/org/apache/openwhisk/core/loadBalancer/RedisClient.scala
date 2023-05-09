@@ -22,7 +22,7 @@ import redis.clients.jedis.JedisPool
 
 
 class RedisClient(
-                   host: String = "8.222.137.85",
+                   host: String = "8.218.125.247",
                    port: Int = 6379,
                    password: String = "openwhisk",
                    database: Int = 0
